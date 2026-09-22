@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Chat App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { display: flex; height: 100vh; background: #e5ddd5; color: #333; }
+    
+    /* Pantalla de Inicio / Registro */
+    #auth-screen { position: fixed; inset: 0; background: #075e54; display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .auth-box { background: white; padding: 25px; border-radius: 10px; width: 320px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    .auth-box h2 { color: #075e54; margin-bottom: 15px; }
+    .auth-box input, .auth-box button { width: 100%; margin: 6px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; outline: none; }
+    .auth-box button { background: #128c7e; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .auth-box button:hover { background: #075e54; }
+
+    /* Layout Principal */
+    #app { display: none; width: 100%; height: 100%; }
+    .sidebar { width: 35%; max-width: 380px; background: #fff; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+    .main-chat { flex: 1; display: flex; flex-direction: column; background: #efeae2; }
+
+    /* Cabeceras y Pestañas */
+    .header { background: #075e54; color: white; padding: 12px; display: flex; align-items: center; justify-content: space-between; }
+    .profile-info { display: flex; align-items: center; gap: 10px; }
+    .profile-info img { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; object-fit: cover; border: 2px solid white; }
+    
+    .tabs { display: flex; background: #128c7e; }
+    .tab-btn { flex: 1; padding: 12px; color: white; border: none; background: none; cursor: pointer; font-weight: bold; }
+    .tab-btn.active { background: #075e54; border-bottom: 3px solid #25d366; }
+
+    /* Listas */
+    .list-container { flex: 1; overflow-y: auto; }
+    .add-bar { padding: 10px; background: #f6f6f6; display: flex; gap: 5px; border-bottom: 1px solid #ddd; }
+    .add-bar input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .add-bar button { padding: 8px 12px; background: #128c7e; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+    .item-card { padding: 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: 0.2s; }
+    .item-card:hover { background: #f5f5f5; }
+
+    /* Mensajes */
+    .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .msg { max-width: 65%; padding: 8px 12px; border-radius: 8px; font-size: 14px; position: relative; word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .msg.sent { background: #dcf8c6; align-self: flex-end; }
+    .msg.received { background: white; align-self: flex-start; }
+    .msg img { max-width: 100%; border-radius: 6px; margin-top: 5px; }
+    .msg.sticker img { width: 130px; height: 130px; background: transparent; }
+    .msg .time { font-size: 10px; color: #888; text-align: right; margin-top: 3px; }
+
+    .chat-input { padding: 10px; background: #f0f0f0; display: flex; gap: 8px; align-items: center; }
+    .chat-input input[type="text"] { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #ccc; outline: none; }
+    .chat-input button { background: none; border: none; font-size: 20px; cursor: pointer; }
+
+    /* Modal Sticker */
+    #sticker-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 20px; border-radius: 10px; text-align: center; }
+    canvas { border: 2px dashed #075e54; background: #fff; margin: 10px 0; cursor: crosshair; touch-action: none; }
+  </style>
+</head>
+<body>
+
+  <!-- PANTALLA DE ACCESO -->
+  <div id="auth-screen">
+    <div class="auth-box">
+      <h2>Mi Chat App</h2>
+      <input type="text" id="username" placeholder="Nombre de usuario">
+      <input type="password" id="password" placeholder="Contraseña">
+      <input type="text" id="initial-friends" placeholder="Amigos iniciales (ej: juan, pedro)">
+      <button onclick="login()">Iniciar Sesión</button>
+      <button onclick="register()" style="background: #34b7f1;">Registrarse</button>
+    </div>
+  </div>
+
+  <!-- APLICACIÓN PRINCIPAL -->
+  <div id="app">
+    <!-- PANEL IZQUIERDO -->
+    <div class="sidebar">
+      <div class="header">
+        <div class="profile-info">
+          <img id="my-avatar" src="" title="Cambiar foto de perfil" onclick="document.getElementById('profile-upload').click()">
+          <input type="file" id="profile-upload" accept="image/*" style="display:none;" onchange="uploadProfilePic(event)">
+          <b id="my-username">Cargando...</b>
+        </div>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" id="btn-tab-chats" onclick="switchTab('chats')">Chats</button>
+        <button class="tab-btn" id="btn-tab-status" onclick="switchTab('status')">Estados</button>
+      </div>
+
+      <!-- Tab: Chats -->
+      <div id="tab-chats" class="list-container">
+        <div class="add-bar">
+          <input type="text" id="add-friend-input" placeholder="Agregar por usuario...">
+          <button onclick="addFriend()">+</button>
+        </div>
+        <div id="friends-list"></div>
+      </div>
+
+      <!-- Tab: Estados -->
+      <div id="tab-status" class="list-container" style="display: none;">
+        <div style="padding: 10px;">
+          <button onclick="postStatusPrompt()" style="width: 100%; padding: 10px; background: #128c7e; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">+ Subir Estado</button>
+        </div>
+        <div id="status-list"></div>
+      </div>
+    </div>
+
+    <!-- PANEL DERECHO (CHAT) -->
+    <div class="main-chat">
+      <div class="header">
+        <h3 id="active-chat-title">Selecciona un amigo para conversar</h3>
+      </div>
+      <div class="chat-messages" id="messages-container"></div>
+      <div class="chat-input" id="input-bar" style="display: none;">
+        <button onclick="openStickerMaker()" title="Crear Sticker">🎨</button>
+        <button onclick="document.getElementById('image-upload').click()" title="Enviar Imagen">📷</button>
+        <input type="file" id="image-upload" accept="image/*" style="display:none;" onchange="sendImage(event)">
+        <input type="text" id="message-text" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter') sendText()">
+        <button onclick="sendText()" style="color: #128c7e; font-weight: bold;">➢</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PARA DIBUJAR STICKERS -->
+  <div id="sticker-modal">
+    <div class="modal-content">
+      <h3>Dibuja tu Sticker</h3>
+      <canvas id="sticker-canvas" width="220" height="220"></canvas><br>
+      <button onclick="clearCanvas()" style="padding: 5px 10px;">Borrar</button>
+      <button onclick="sendSticker()" style="padding: 5px 10px; background: #128c7e; color: white; border: none;">Enviar</button>
+      <button onclick="closeStickerMaker()" style="padding: 5px 10px;">Cancelar</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let me = null;
+    let activeChat = null;
+
+    // --- AUTENTICACIÓN ---
+    function register() {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      const f = document.getElementById('initial-friends').value;
+      socket.emit('register', { username: u, password: p, initialFriends: f }, (res) => {
+        alert(res.message);
+      });
+    }
+
+    function login() {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      socket.emit('login', { username: u, password: p }, (res) => {
+        if (res.success) {
+          me = res.userData.username;
+          document.getElementById('my-username').innerText = me;
+          document.getElementById('my-avatar').src = res.userData.profilePic;
+          document.getElementById('auth-screen').style.display = 'none';
+          document.getElementById('app').style.display = 'flex';
+          updateFriendsList(res.userData.friends);
+        } else {
+          alert(res.message);
+        }
+      });
+    }
+
+    // --- PERFIL ---
+    function uploadProfilePic(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        document.getElementById('my-avatar').src = evt.target.result;
+        socket.emit('update_profile_pic', evt.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // --- GESTIÓN DE AMIGOS ---
+    function addFriend() {
+      const target = document.getElementById('add-friend-input').value;
+      if (!target) return;
+      socket.emit('add_friend', target, (res) => {
+        if (res.success) {
+          appendFriendCard(res.friend);
+          document.getElementById('add-friend-input').value = '';
+        } else {
+          alert(res.message);
+        }
+      });
+    }
+
+    socket.on('friend_added', (friend) => { appendFriendCard(friend); });
+
+    function updateFriendsList(friends) {
+      const list = document.getElementById('friends-list');
+      list.innerHTML = '';
+      friends.forEach(f => appendFriendCard(f));
+    }
+
+    function appendFriendCard(username) {
+      const list = document.getElementById('friends-list');
+      const div = document.createElement('div');
+      div.className = 'item-card';
+      div.innerHTML = `<b>${username}</b>`;
+      div.onclick = () => selectChat(username);
+      list.appendChild(div);
+    }
+
+    function selectChat(username) {
+      activeChat = username;
+      document.getElementById('active-chat-title').innerText = username;
+      document.getElementById('input-bar').style.display = 'flex';
+      document.getElementById('messages-container').innerHTML = '';
+    }
+
+    // --- MENSAJERÍA ---
+    function sendText() {
+      const input = document.getElementById('message-text');
+      if (!input.value.trim() || !activeChat) return;
+      socket.emit('send_message', { to: activeChat, content: input.value, type: 'text' });
+      input.value = '';
+    }
+
+    function sendImage(e) {
+      const file = e.target.files[0];
+      if (!file || !activeChat) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        socket.emit('send_message', { to: activeChat, content: evt.target.result, type: 'image' });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    socket.on('receive_message', (msg) => {
+      if (msg.from !== activeChat && msg.to !== activeChat) return;
+      const container = document.getElementById('messages-container');
+      const div = document.createElement('div');
+      div.className = `msg ${msg.from === me ? 'sent' : 'received'} ${msg.type === 'sticker' ? 'sticker' : ''}`;
+
+      if (msg.type === 'text') {
+        div.innerText = msg.content;
+      } else if (msg.type === 'image' || msg.type === 'sticker') {
+        const img = document.createElement('img');
+        img.src = msg.content;
+        div.appendChild(img);
+      }
+
+      const timeDiv = document.createElement('div');
+      timeDiv.className = 'time';
+      timeDiv.innerText = msg.timestamp;
+      div.appendChild(timeDiv);
+
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    });
+
+    // --- ESTADOS ---
+    function switchTab(tab) {
+      document.getElementById('tab-chats').style.display = tab === 'chats' ? 'block' : 'none';
+      document.getElementById('tab-status').style.display = tab === 'status' ? 'block' : 'none';
+      document.getElementById('btn-tab-chats').classList.toggle('active', tab === 'chats');
+      document.getElementById('btn-tab-status').classList.toggle('active', tab === 'status');
+
+      if (tab === 'status') {
+        socket.emit('get_statuses', (statuses) => {
+          const container = document.getElementById('status-list');
+          container.innerHTML = '';
+          statuses.forEach(renderStatus);
+        });
+      }
+    }
+
+    function postStatusPrompt() {
+      const text = prompt("Escribe tu estado:");
+      if (text) {
+        socket.emit('post_status', { content: text, type: 'text' });
+      }
+    }
+
+    socket.on('new_status', renderStatus);
+
+    function renderStatus(st) {
+      const container = document.getElementById('status-list');
+      const div = document.createElement('div');
+      div.className = 'item-card';
+      div.innerHTML = `<div><b>${st.username}</b> <small style="color:#888;">${st.time}</small><p style="margin-top:3px;">${st.content}</p></div>`;
+      container.prepend(div);
+    }
+
+    // --- CREADOR DE STICKERS (RATÓN Y PANTALLA TÁCTIL DE CHROMEBOOK) ---
+    const canvas = document.getElementById('sticker-canvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function startDraw(e) { drawing = true; draw(e); }
+    function stopDraw() { drawing = false; ctx.beginPath(); }
+
+    function draw(e) {
+      if (!drawing) return;
+      const pos = getPos(e);
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#075e54';
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('touchstart', startDraw);
+    canvas.addEventListener('touchend', stopDraw);
+    canvas.addEventListener('touchmove', draw);
+
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+    function openStickerMaker() { document.getElementById('sticker-modal').style.display = 'flex'; }
+    function closeStickerMaker() { document.getElementById('sticker-modal').style.display = 'none'; clearCanvas(); }
+
+    function sendSticker() {
+      if (!activeChat) return;
+      const stickerBase64 = canvas.toDataURL('image/png');
+      socket.emit('send_message', { to: activeChat, content: stickerBase64, type: 'sticker' });
+      closeStickerMaker();
+    }
+  </script>
+</body>
+</html>
